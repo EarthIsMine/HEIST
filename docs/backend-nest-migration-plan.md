@@ -31,7 +31,7 @@
 - `RoomStateRepository` 및 정합성 검사 도구 이식
 - 복구 드릴 API 및 risk gate 연동
 
-6. 점진 트래픽 전환
+6. 점진 트래픽 전환 [진행중]
 - `10% -> 25% -> 50% -> 100%` 룸 타입/비율 카나리
 - 게이트 위반 시 즉시 롤백
 
@@ -48,4 +48,18 @@
 - 완료: 3단계(Room lifecycle 경로 이식)
 - 완료: 4단계(실제 RoomManager/GameLoop 경로를 Nest Gateway에 연결)
 - 완료: 5단계(Nest 로컬 `/_metrics`, `/_state/rooms`, `/_state/consistency`, `/_state/recovery-drill` 연동)
-- 다음: 6단계(점진 트래픽 전환)
+- 진행중: 6단계(룸 해시 기반 트래픽 카나리 + strict 게이트)
+
+## 6단계 환경변수
+
+- `NEST_TRAFFIC_CANARY_ENABLED=true|false` (기본 `false`)
+- `NEST_TRAFFIC_CANARY_PERCENT=10` (기본 `10`)
+- `NEST_TRAFFIC_CANARY_ROOM_TYPES=default,ranked` (기본 `default`)
+- `NEST_TRAFFIC_CANARY_STRICT=true|false` (기본 `false`)
+- `NEST_TRAFFIC_SAMPLE_ROOM_ID=default:sample` (`/_metrics` 샘플 판정용)
+
+## 6단계 검증 포인트
+
+- `GET /_migrate/room/decision?roomId=default:abc`로 라우팅 판정 확인
+- strict on + 비대상 roomId일 때 `join_room`/`/_migrate/room/join`에서 `route=legacy` 응답 확인
+- `/_metrics.migration.nestTrafficCanary`로 현재 카나리 설정/샘플 판정 확인
