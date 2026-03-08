@@ -23,11 +23,11 @@
 - `join_room` 관련 검증/아이템포턴시/샤딩 게이트를 Nest 서비스로 이식
 - 카나리 룸 타입만 Nest 경로 사용
 
-4. 실시간 이벤트 계층 이식 [진행중]
+4. 실시간 이벤트 계층 이식 [완료]
 - Socket Gateway를 Nest로 추가
 - room partition ordering/queue 정책 반영
 
-5. 상태 저장/복구 체계 이식
+5. 상태 저장/복구 체계 이식 [다음]
 - `RoomStateRepository` 및 정합성 검사 도구 이식
 - 복구 드릴 API 및 risk gate 연동
 
@@ -45,7 +45,7 @@
 
 - 완료: 1단계
 - 완료: 2단계(운영 엔드포인트 확장)
-- 진행중: 4단계(Socket Gateway에 입력/스킬 이벤트 수용 경로까지 연결)
+- 완료: 4단계(실제 RoomManager/GameLoop 경로를 Nest Gateway에 연결)
 - 다음: 5단계(상태 저장/복구 체계 이식)
 
 ## 2단계 환경변수

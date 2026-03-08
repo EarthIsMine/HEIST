@@ -1,15 +1,13 @@
 import { Logger } from '@nestjs/common';
 import {
-  ConnectedSocket,
-  MessageBody,
+  OnGatewayInit,
   OnGatewayConnection,
   OnGatewayDisconnect,
-  SubscribeMessage,
   WebSocketGateway,
   WebSocketServer,
 } from '@nestjs/websockets';
 import type { Server, Socket } from 'socket.io';
-import { RoomLifecycleService } from '../services/room-lifecycle.service';
+import { RoomManager } from '../../../backend/src/rooms/RoomManager.js';
 
 type JoinRoomPayload = {
   name: string;
@@ -23,129 +21,87 @@ type JoinRoomPayload = {
   },
   transports: ['websocket', 'polling'],
 })
-export class HeistGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class HeistGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
   private readonly logger = new Logger(HeistGateway.name);
+  private roomManager: RoomManager | null = null;
+  private readonly minPlayers = parseInt(process.env.MIN_PLAYERS || '1', 10);
 
   @WebSocketServer()
   server!: Server;
 
-  constructor(private readonly roomLifecycle: RoomLifecycleService) {}
+  afterInit(server: Server): void {
+    // 4단계 완성: Nest Gateway에서 기존 RoomManager/GameLoop를 직접 사용한다.
+    // 이렇게 하면 스킬/물리/틱/스냅샷 브로드캐스트가 legacy와 동일하게 동작한다.
+    this.roomManager = new RoomManager(server as any, this.minPlayers);
+  }
 
   handleConnection(client: Socket): void {
     this.logger.log(`Client connected: ${client.id}`);
-  }
+    const manager = this.roomManager;
+    if (!manager) return;
 
-  handleDisconnect(client: Socket): void {
-    const roomId = this.roomLifecycle.handleDisconnect(client.id);
-    if (roomId) {
-      const room = this.roomLifecycle.getRoomInfo(roomId);
-      if (room) {
-        this.server.to(roomId).emit('room_state', room);
-      }
-    }
-    this.logger.log(`Client disconnected: ${client.id}`);
-  }
-
-  @SubscribeMessage('list_rooms')
-  handleListRooms() {
-    return this.roomLifecycle.listRooms();
-  }
-
-  @SubscribeMessage('join_room')
-  handleJoinRoom(
-    @ConnectedSocket() client: Socket,
-    @MessageBody() body: [string, JoinRoomPayload],
-  ) {
-    const [roomId, payload] = body;
-    if (!roomId || !payload?.walletAddress) {
-      return {
-        ok: false,
-        error: 'roomId and walletAddress are required',
-      };
-    }
-
-    const result = this.roomLifecycle.joinRoom({
-      socketId: client.id,
-      roomId,
-      name: payload.name || `Player-${payload.walletAddress.slice(0, 4)}`,
-      walletAddress: payload.walletAddress,
-      requestId: payload.requestId,
+    client.on('list_rooms', (ack) => {
+      ack(manager.listRooms());
     });
-    if (!result.ok) return result;
 
-    client.join(roomId);
-    const room = this.roomLifecycle.getRoomInfo(roomId);
-    if (room) {
-      this.server.to(roomId).emit('room_state', room);
+    client.on('join_room', (roomId: string, payload: JoinRoomPayload, ack) => {
+      manager.handleJoinRoom(client as any, roomId, payload as any, ack);
+    });
+
+    client.on('confirm_entry', (txSignature: string, ack) => {
+      manager.handleConfirmEntry(client as any, txSignature, ack);
+    });
+
+    client.on('select_team', (team: 'cop' | 'thief', ack) => {
+      const result = manager.handleSelectTeam(client as any, team);
+      ack(result);
+    });
+
+    client.on('ready', () => {
+      manager.handleReady(client as any);
+    });
+
+    client.on('input_move', (direction: { x: number; y: number }) => {
+      manager.handleInputMove(client as any, direction);
+    });
+
+    client.on('request_steal', (storageId: string) => {
+      manager.handleRequestSkill(client as any, 'steal', storageId);
+    });
+
+    client.on('request_break_jail', () => {
+      manager.handleRequestSkill(client as any, 'break_jail');
+    });
+
+    client.on('request_arrest', (targetId: string) => {
+      manager.handleRequestSkill(client as any, 'arrest', targetId);
+    });
+
+    client.on('request_disguise', () => {
+      manager.handleRequestSkill(client as any, 'disguise');
+    });
+
+    client.on('request_build_wall', () => {
+      manager.handleRequestSkill(client as any, 'build_wall');
+    });
+
+    client.on('cancel_skill', () => {
+      manager.handleCancelSkill(client as any);
+    });
+
+    client.on('disconnect', () => {
+      manager.handleDisconnect(client as any);
+      this.logger.log(`Client disconnected: ${client.id}`);
+    });
+  }
+
+  handleDisconnect(_client: Socket): void {
+    // 실제 disconnect 처리/정리는 connection 핸들러 내 socket.on('disconnect')에서 수행한다.
+  }
+
+  onModuleDestroy(): void {
+    if (this.roomManager) {
+      this.roomManager.abortAllGames('Nest gateway is shutting down');
     }
-    return result;
-  }
-
-  @SubscribeMessage('confirm_entry')
-  handleConfirmEntry(@ConnectedSocket() client: Socket) {
-    const result = this.roomLifecycle.confirmEntry(client.id);
-    const roomId = [...client.rooms].find((r) => r !== client.id);
-    if (roomId && result.ok) {
-      const room = this.roomLifecycle.getRoomInfo(roomId);
-      if (room) this.server.to(roomId).emit('room_state', room);
-    }
-    return result;
-  }
-
-  @SubscribeMessage('select_team')
-  handleSelectTeam(@ConnectedSocket() client: Socket, @MessageBody() team: 'cop' | 'thief') {
-    const result = this.roomLifecycle.selectTeam(client.id, team);
-    const roomId = [...client.rooms].find((r) => r !== client.id);
-    if (roomId && result.ok) {
-      const room = this.roomLifecycle.getRoomInfo(roomId);
-      if (room) this.server.to(roomId).emit('room_state', room);
-    }
-    return result;
-  }
-
-  @SubscribeMessage('ready')
-  handleReady(@ConnectedSocket() client: Socket) {
-    this.roomLifecycle.setReady(client.id);
-    const roomId = [...client.rooms].find((r) => r !== client.id);
-    if (roomId) {
-      const room = this.roomLifecycle.getRoomInfo(roomId);
-      if (room) this.server.to(roomId).emit('room_state', room);
-    }
-  }
-
-  @SubscribeMessage('input_move')
-  handleInputMove(@ConnectedSocket() client: Socket, @MessageBody() direction: { x: number; y: number }) {
-    if (!direction || !Number.isFinite(direction.x) || !Number.isFinite(direction.y)) return;
-    this.roomLifecycle.applyInput(client.id, direction);
-  }
-
-  @SubscribeMessage('request_steal')
-  handleRequestSteal(@ConnectedSocket() client: Socket, @MessageBody() storageId: string) {
-    this.roomLifecycle.requestSkill(client.id, 'steal', storageId);
-  }
-
-  @SubscribeMessage('request_break_jail')
-  handleRequestBreakJail(@ConnectedSocket() client: Socket) {
-    this.roomLifecycle.requestSkill(client.id, 'break_jail');
-  }
-
-  @SubscribeMessage('request_arrest')
-  handleRequestArrest(@ConnectedSocket() client: Socket, @MessageBody() targetId: string) {
-    this.roomLifecycle.requestSkill(client.id, 'arrest', targetId);
-  }
-
-  @SubscribeMessage('request_disguise')
-  handleRequestDisguise(@ConnectedSocket() client: Socket) {
-    this.roomLifecycle.requestSkill(client.id, 'disguise');
-  }
-
-  @SubscribeMessage('request_build_wall')
-  handleRequestBuildWall(@ConnectedSocket() client: Socket) {
-    this.roomLifecycle.requestSkill(client.id, 'build_wall');
-  }
-
-  @SubscribeMessage('cancel_skill')
-  handleCancelSkill(@ConnectedSocket() client: Socket) {
-    this.roomLifecycle.cancelSkill(client.id);
   }
 }
