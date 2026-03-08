@@ -19,7 +19,7 @@
 - Stage1~4 운영 엔드포인트를 Nest에 동일 스키마로 제공
 - 모니터링 대시보드가 Nest/legacy 구분 없이 읽도록 정렬
 
-3. Room Lifecycle API 이식
+3. Room Lifecycle API 이식 [진행중]
 - `join_room` 관련 검증/아이템포턴시/샤딩 게이트를 Nest 서비스로 이식
 - 카나리 룸 타입만 Nest 경로 사용
 
@@ -44,8 +44,9 @@
 ## 현재 상태
 
 - 완료: 1단계
-- 진행중: 2단계(`/_state/rooms`, `/_state/recovery-drill` 추가)
-- 다음: 3단계(Room lifecycle 이식)
+- 완료: 2단계(운영 엔드포인트 확장)
+- 진행중: 3단계(`/_migrate/room/join`으로 join 정책 포팅 시작)
+- 다음: 4단계(실시간 이벤트 계층 이식)
 
 ## 2단계 환경변수
 
