@@ -114,37 +114,38 @@ export class HeistGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage('input_move')
-  handleInputMove() {
-    // TODO(stage4): game loop 이식 후 실제 입력 처리 연결
+  handleInputMove(@ConnectedSocket() client: Socket, @MessageBody() direction: { x: number; y: number }) {
+    if (!direction || !Number.isFinite(direction.x) || !Number.isFinite(direction.y)) return;
+    this.roomLifecycle.applyInput(client.id, direction);
   }
 
   @SubscribeMessage('request_steal')
-  handleRequestSteal() {
-    // TODO(stage4): skill engine 이식 후 연결
+  handleRequestSteal(@ConnectedSocket() client: Socket, @MessageBody() storageId: string) {
+    this.roomLifecycle.requestSkill(client.id, 'steal', storageId);
   }
 
   @SubscribeMessage('request_break_jail')
-  handleRequestBreakJail() {
-    // TODO(stage4): skill engine 이식 후 연결
+  handleRequestBreakJail(@ConnectedSocket() client: Socket) {
+    this.roomLifecycle.requestSkill(client.id, 'break_jail');
   }
 
   @SubscribeMessage('request_arrest')
-  handleRequestArrest() {
-    // TODO(stage4): skill engine 이식 후 연결
+  handleRequestArrest(@ConnectedSocket() client: Socket, @MessageBody() targetId: string) {
+    this.roomLifecycle.requestSkill(client.id, 'arrest', targetId);
   }
 
   @SubscribeMessage('request_disguise')
-  handleRequestDisguise() {
-    // TODO(stage4): skill engine 이식 후 연결
+  handleRequestDisguise(@ConnectedSocket() client: Socket) {
+    this.roomLifecycle.requestSkill(client.id, 'disguise');
   }
 
   @SubscribeMessage('request_build_wall')
-  handleRequestBuildWall() {
-    // TODO(stage4): skill engine 이식 후 연결
+  handleRequestBuildWall(@ConnectedSocket() client: Socket) {
+    this.roomLifecycle.requestSkill(client.id, 'build_wall');
   }
 
   @SubscribeMessage('cancel_skill')
-  handleCancelSkill() {
-    // TODO(stage4): skill engine 이식 후 연결
+  handleCancelSkill(@ConnectedSocket() client: Socket) {
+    this.roomLifecycle.cancelSkill(client.id);
   }
 }

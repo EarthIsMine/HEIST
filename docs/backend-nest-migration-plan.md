@@ -45,7 +45,7 @@
 
 - 완료: 1단계
 - 완료: 2단계(운영 엔드포인트 확장)
-- 진행중: 4단계(Socket Gateway에 `confirm_entry/select_team/ready`까지 이식)
+- 진행중: 4단계(Socket Gateway에 입력/스킬 이벤트 수용 경로까지 연결)
 - 다음: 5단계(상태 저장/복구 체계 이식)
 
 ## 2단계 환경변수

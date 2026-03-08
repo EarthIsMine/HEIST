@@ -28,6 +28,9 @@ type RoomState = {
   phase: 'filling' | 'playing' | 'ended';
   players: Map<string, RoomPlayer>;
   walletToSocketId: Map<string, string>;
+  // 이행 단계에서는 최소 입력/스킬 트래킹만 수행하고, 추후 게임 루프 이식으로 확장한다.
+  lastInputBySocketId: Map<string, { x: number; y: number }>;
+  lastSkillBySocketId: Map<string, { skill: string; targetId?: string; at: number }>;
 };
 
 @Injectable()
@@ -40,6 +43,8 @@ export class RoomLifecycleService {
   private readonly rooms = new Map<string, RoomState>();
   private readonly socketToRoomId = new Map<string, string>();
   private readonly shardRooms = new Map<number, number>();
+  // roomId 파티션 키 기반 직렬 처리 큐
+  private readonly roomOpQueue = new Map<string, Promise<void>>();
   private readonly joinIdemCache = new Map<string, { result: JoinResult; expiresAt: number }>();
 
   joinRoom(input: {
@@ -83,6 +88,8 @@ export class RoomLifecycleService {
         phase: 'filling',
         players: new Map(),
         walletToSocketId: new Map(),
+        lastInputBySocketId: new Map(),
+        lastSkillBySocketId: new Map(),
       };
       this.rooms.set(input.roomId, room);
       this.shardRooms.set(shardId, roomsInShard + 1);
@@ -122,9 +129,12 @@ export class RoomLifecycleService {
   }
 
   confirmEntry(socketId: string): AckResult {
-    const player = this.getPlayerBySocket(socketId);
-    if (!player) return { ok: false, error: 'Not in room' };
-    player.confirmed = true;
+    const roomId = this.socketToRoomId.get(socketId);
+    if (!roomId) return { ok: false, error: 'Not in room' };
+    this.enqueueRoomOperation(roomId, () => {
+      const player = this.getPlayerBySocket(socketId);
+      if (player) player.confirmed = true;
+    });
     return { ok: true };
   }
 
@@ -143,13 +153,53 @@ export class RoomLifecycleService {
     const limit = team === 'cop' ? COP_COUNT : THIEF_COUNT;
     if (count >= limit) return { ok: false, error: `${team} team is full` };
 
-    player.selectedTeam = team;
+    this.enqueueRoomOperation(roomId, () => {
+      player.selectedTeam = team;
+    });
     return { ok: true };
   }
 
   setReady(socketId: string): void {
-    const player = this.getPlayerBySocket(socketId);
-    if (player) player.ready = true;
+    const roomId = this.socketToRoomId.get(socketId);
+    if (!roomId) return;
+    this.enqueueRoomOperation(roomId, () => {
+      const player = this.getPlayerBySocket(socketId);
+      if (player) player.ready = true;
+    });
+  }
+
+  applyInput(socketId: string, direction: { x: number; y: number }): void {
+    const roomId = this.socketToRoomId.get(socketId);
+    if (!roomId) return;
+    const room = this.rooms.get(roomId);
+    if (!room) return;
+    this.enqueueRoomOperation(roomId, () => {
+      room.lastInputBySocketId.set(socketId, direction);
+    });
+  }
+
+  requestSkill(socketId: string, skill: string, targetId?: string): void {
+    const roomId = this.socketToRoomId.get(socketId);
+    if (!roomId) return;
+    const room = this.rooms.get(roomId);
+    if (!room) return;
+    this.enqueueRoomOperation(roomId, () => {
+      room.lastSkillBySocketId.set(socketId, {
+        skill,
+        targetId,
+        at: Date.now(),
+      });
+    });
+  }
+
+  cancelSkill(socketId: string): void {
+    const roomId = this.socketToRoomId.get(socketId);
+    if (!roomId) return;
+    const room = this.rooms.get(roomId);
+    if (!room) return;
+    this.enqueueRoomOperation(roomId, () => {
+      room.lastSkillBySocketId.delete(socketId);
+    });
   }
 
   handleDisconnect(socketId: string): string | null {
@@ -243,5 +293,19 @@ export class RoomLifecycleService {
       if (entry.expiresAt <= now) this.joinIdemCache.delete(key);
     }
   }
-}
 
+  private enqueueRoomOperation(roomId: string, fn: () => void): void {
+    const prev = this.roomOpQueue.get(roomId) || Promise.resolve();
+    const next = prev
+      .then(() => {
+        fn();
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (this.roomOpQueue.get(roomId) === next) {
+          this.roomOpQueue.delete(roomId);
+        }
+      });
+    this.roomOpQueue.set(roomId, next);
+  }
+}
