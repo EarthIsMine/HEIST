@@ -16,6 +16,7 @@ Nest 병행 이관의 마지막 단계로, 트래픽을 `10% -> 25% -> 50% -> 10
 2. 스모크 검증
 - `/_migrate/room/decision`으로 allow/deny roomId 확보
 - `/_migrate/room/join`으로 allow/deny 각각 기대 결과 확인
+- `0%`/`100%` 특수 케이스는 단방향(deny-only/allow-only) 검증으로 자동 처리
 
 3. 리스크 게이트 확인
 - `/_metrics.operations.stage4RiskGates.rollbackRecommended=false`
@@ -46,4 +47,3 @@ npm run dev -w packages/backend-nest
 # 스모크 체크 자동 실행
 npm run canary:smoke -w packages/backend-nest
 ```
-
