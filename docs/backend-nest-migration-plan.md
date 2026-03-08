@@ -10,12 +10,12 @@
 
 ## 단계
 
-1. Nest 병행 실행 골격
+1. Nest 병행 실행 골격 [완료]
 - Nest 앱 신규 패키지 생성
 - `/health`, `/_metrics`, `/_state/consistency` 기초 엔드포인트 제공
 - (옵션) legacy 백엔드 read-proxy 연결
 
-2. 공통 운영 엔드포인트 이식
+2. 공통 운영 엔드포인트 이식 [진행중]
 - Stage1~4 운영 엔드포인트를 Nest에 동일 스키마로 제공
 - 모니터링 대시보드가 Nest/legacy 구분 없이 읽도록 정렬
 
@@ -41,3 +41,14 @@
 - legacy backend 의존 read/write 경로 제거
 - 운영 엔드포인트/대시보드 완전 이관
 
+## 현재 상태
+
+- 완료: 1단계
+- 진행중: 2단계(`/_state/rooms`, `/_state/recovery-drill` 추가)
+- 다음: 3단계(Room lifecycle 이식)
+
+## 2단계 환경변수
+
+- `NEST_LEGACY_READ_PROXY=true|false`
+- `NEST_LEGACY_WRITE_PROXY=true|false`
+- `LEGACY_BACKEND_URL=http://127.0.0.1:3001`
