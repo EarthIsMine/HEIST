@@ -2,12 +2,14 @@
   "name": "@heist/backend-nest",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
-    "dev": "ts-node --project tsconfig.json src/main.ts",
+    "dev": "node --loader ts-node/esm --experimental-specifier-resolution=node src/main.ts",
     "build": "tsc",
     "start": "node dist/main.js"
   },
   "dependencies": {
+    "@heist/shared": "*",
     "@nestjs/common": "^11.0.0",
     "@nestjs/core": "^11.0.0",
     "@nestjs/platform-express": "^11.0.0",

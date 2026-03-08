@@ -1,4 +1,13 @@
 import { Injectable } from '@nestjs/common';
+import {
+  COP_COUNT,
+  ENTRY_FEE_LAMPORTS,
+  MAX_PLAYERS,
+  THIEF_COUNT,
+  type RoomInfo,
+  type RoomPlayer,
+  type Team,
+} from '@heist/shared';
 import { buildSuggestedRoomId, getShardId } from '../domain/room-policy';
 
 type JoinResult = {
@@ -8,6 +17,19 @@ type JoinResult = {
   suggestedRoomId?: string;
 };
 
+type AckResult = {
+  ok: boolean;
+  error?: string;
+};
+
+type RoomState = {
+  id: string;
+  name: string;
+  phase: 'filling' | 'playing' | 'ended';
+  players: Map<string, RoomPlayer>;
+  walletToSocketId: Map<string, string>;
+};
+
 @Injectable()
 export class RoomLifecycleService {
   private readonly maxActiveRooms = parseInt(process.env.NEST_MAX_ACTIVE_ROOMS || '200', 10);
@@ -15,12 +37,18 @@ export class RoomLifecycleService {
   private readonly shardCount = parseInt(process.env.NEST_SHARD_COUNT || '16', 10);
   private readonly joinIdemTtlMs = parseInt(process.env.NEST_JOIN_IDEMPOTENCY_TTL_MS || '30000', 10);
 
-  private readonly rooms = new Map<string, number>();
+  private readonly rooms = new Map<string, RoomState>();
+  private readonly socketToRoomId = new Map<string, string>();
   private readonly shardRooms = new Map<number, number>();
   private readonly joinIdemCache = new Map<string, { result: JoinResult; expiresAt: number }>();
 
-  // 실제 Socket 이식 전, join 정책을 Nest 서비스로 먼저 포팅하는 중간 단계.
-  joinRoom(input: { roomId: string; walletAddress: string; requestId?: string }): JoinResult {
+  joinRoom(input: {
+    socketId: string;
+    roomId: string;
+    name: string;
+    walletAddress: string;
+    requestId?: string;
+  }): JoinResult {
     this.pruneIdempotency();
     const idemKey = input.requestId ? `${input.walletAddress}:${input.roomId}:${input.requestId}` : null;
     if (idemKey) {
@@ -28,10 +56,10 @@ export class RoomLifecycleService {
       if (cached && cached.expiresAt > Date.now()) return cached.result;
     }
 
-    const exists = this.rooms.has(input.roomId);
+    let room = this.rooms.get(input.roomId);
     const shardId = getShardId(input.roomId, this.shardCount);
 
-    if (!exists && this.rooms.size >= this.maxActiveRooms) {
+    if (!room && this.rooms.size >= this.maxActiveRooms) {
       return this.cacheAndReturn(idemKey, {
         ok: false,
         error: `Nest room capacity reached (${this.maxActiveRooms})`,
@@ -39,7 +67,7 @@ export class RoomLifecycleService {
       });
     }
 
-    if (!exists) {
+    if (!room) {
       const roomsInShard = this.shardRooms.get(shardId) || 0;
       if (roomsInShard >= this.maxRoomsPerShard) {
         return this.cacheAndReturn(idemKey, {
@@ -49,12 +77,115 @@ export class RoomLifecycleService {
           suggestedRoomId: buildSuggestedRoomId(this.findCoolestShard()),
         });
       }
-      this.rooms.set(input.roomId, 0);
+      room = {
+        id: input.roomId,
+        name: `Room ${input.roomId.slice(0, 6)}`,
+        phase: 'filling',
+        players: new Map(),
+        walletToSocketId: new Map(),
+      };
+      this.rooms.set(input.roomId, room);
       this.shardRooms.set(shardId, roomsInShard + 1);
     }
 
-    this.rooms.set(input.roomId, (this.rooms.get(input.roomId) || 0) + 1);
+    if (room.phase !== 'filling') {
+      return this.cacheAndReturn(idemKey, {
+        ok: false,
+        error: 'Room is already in progress',
+      });
+    }
+    if (room.players.size >= MAX_PLAYERS) {
+      return this.cacheAndReturn(idemKey, {
+        ok: false,
+        error: 'Room is full',
+      });
+    }
+
+    const prevSocketId = room.walletToSocketId.get(input.walletAddress);
+    if (prevSocketId && prevSocketId !== input.socketId) {
+      room.players.delete(prevSocketId);
+      this.socketToRoomId.delete(prevSocketId);
+      room.walletToSocketId.delete(input.walletAddress);
+    }
+
+    room.players.set(input.socketId, {
+      id: input.socketId,
+      name: input.name,
+      walletAddress: input.walletAddress,
+      ready: false,
+      confirmed: ENTRY_FEE_LAMPORTS === 0,
+      selectedTeam: 'thief',
+    });
+    room.walletToSocketId.set(input.walletAddress, input.socketId);
+    this.socketToRoomId.set(input.socketId, input.roomId);
     return this.cacheAndReturn(idemKey, { ok: true });
+  }
+
+  confirmEntry(socketId: string): AckResult {
+    const player = this.getPlayerBySocket(socketId);
+    if (!player) return { ok: false, error: 'Not in room' };
+    player.confirmed = true;
+    return { ok: true };
+  }
+
+  selectTeam(socketId: string, team: Team): AckResult {
+    const roomId = this.socketToRoomId.get(socketId);
+    if (!roomId) return { ok: false, error: 'Not in room' };
+    const room = this.rooms.get(roomId);
+    if (!room) return { ok: false, error: 'Not in room' };
+    const player = room.players.get(socketId);
+    if (!player) return { ok: false, error: 'Not in room' };
+
+    let count = 0;
+    for (const [id, p] of room.players.entries()) {
+      if (id !== socketId && p.selectedTeam === team) count += 1;
+    }
+    const limit = team === 'cop' ? COP_COUNT : THIEF_COUNT;
+    if (count >= limit) return { ok: false, error: `${team} team is full` };
+
+    player.selectedTeam = team;
+    return { ok: true };
+  }
+
+  setReady(socketId: string): void {
+    const player = this.getPlayerBySocket(socketId);
+    if (player) player.ready = true;
+  }
+
+  handleDisconnect(socketId: string): string | null {
+    const roomId = this.socketToRoomId.get(socketId);
+    if (!roomId) return null;
+    const room = this.rooms.get(roomId);
+    this.socketToRoomId.delete(socketId);
+    if (!room) return null;
+
+    const player = room.players.get(socketId);
+    if (player) {
+      room.walletToSocketId.delete(player.walletAddress);
+    }
+    room.players.delete(socketId);
+
+    if (room.players.size === 0) {
+      this.rooms.delete(roomId);
+      const shardId = getShardId(roomId, this.shardCount);
+      const next = Math.max(0, (this.shardRooms.get(shardId) || 0) - 1);
+      if (next === 0) this.shardRooms.delete(shardId);
+      else this.shardRooms.set(shardId, next);
+    }
+
+    return roomId;
+  }
+
+  listRooms(): RoomInfo[] {
+    return [...this.rooms.values()]
+      .filter((room) => room.phase === 'filling')
+      .map((room) => this.toRoomInfo(room));
+  }
+
+  getRoomInfo(roomId: string): RoomInfo | null {
+    const room = this.rooms.get(roomId);
+    if (!room) return null;
+    return this.toRoomInfo(room);
   }
 
   getSnapshot() {
@@ -63,6 +194,24 @@ export class RoomLifecycleService {
       shardCount: this.shardCount,
       shardRooms: [...this.shardRooms.entries()].map(([shardId, rooms]) => ({ shardId, rooms })),
     };
+  }
+
+  private toRoomInfo(room: RoomState): RoomInfo {
+    return {
+      id: room.id,
+      name: room.name,
+      players: [...room.players.values()],
+      maxPlayers: MAX_PLAYERS,
+      entryFeeLamports: ENTRY_FEE_LAMPORTS,
+    };
+  }
+
+  private getPlayerBySocket(socketId: string): RoomPlayer | null {
+    const roomId = this.socketToRoomId.get(socketId);
+    if (!roomId) return null;
+    const room = this.rooms.get(roomId);
+    if (!room) return null;
+    return room.players.get(socketId) || null;
   }
 
   private findCoolestShard(): number {

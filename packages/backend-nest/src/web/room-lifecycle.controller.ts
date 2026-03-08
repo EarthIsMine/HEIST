@@ -17,7 +17,9 @@ export class RoomLifecycleController {
     }
 
     const result = this.roomLifecycle.joinRoom({
+      socketId: `http:${body.walletAddress}`,
       roomId: body.roomId,
+      name: 'http-probe',
       walletAddress: body.walletAddress,
       requestId: body.requestId,
     });
@@ -32,4 +34,3 @@ export class RoomLifecycleController {
     return this.roomLifecycle.getSnapshot();
   }
 }
-
