@@ -1,51 +1,39 @@
 import { Body, Controller, Get, Post } from '@nestjs/common';
-import { LegacyReadProxyService } from '../services/legacy-read-proxy.service';
+import { metricsRegistry } from '../../../backend/src/observability/MetricsRegistry.js';
+import { roomStateRepository } from '../../../backend/src/state/RoomStateRepository.js';
+import { RuntimeCoreService } from '../services/runtime-core.service';
 
 @Controller()
 export class OpsController {
-  constructor(private readonly legacyProxy: LegacyReadProxyService) {}
+  constructor(private readonly runtimeCore: RuntimeCoreService) {}
 
   @Get('/_metrics')
   async getMetrics() {
-    // 병행 이관 초반에는 legacy 관측치를 그대로 프록시해 대시보드 스키마를 안정화한다.
-    const legacy = await this.legacyProxy.getJson<Record<string, unknown>>('/_metrics');
-    if (legacy) return legacy;
-    return {
-      source: 'nest-local',
-      migrationPhase: 'phase-1-bootstrap',
-      legacyReadProxy: this.legacyProxy.isEnabled(),
-      generatedAt: new Date().toISOString(),
-    };
+    // legacy 프록시를 거치지 않고 Nest 프로세스가 누적한 메트릭 스냅샷을 직접 노출한다.
+    return metricsRegistry.getSnapshot();
   }
 
   @Get('/_state/consistency')
   async getConsistency() {
-    const legacy = await this.legacyProxy.getJson<Record<string, unknown>>('/_state/consistency');
-    if (legacy) return legacy;
-    return {
-      ok: true,
-      source: 'nest-local',
-      migrationPhase: 'phase-1-bootstrap',
-      checkedAt: new Date().toISOString(),
-      note: 'legacy proxy disabled or unavailable',
-    };
+    // 5단계: Nest 런타임의 RoomManager 상태 기준으로 정합성 리포트를 생성한다.
+    const report = await this.runtimeCore.buildConsistencyReport();
+    return report;
   }
 
   @Get('/_state/rooms')
   async getStateRooms() {
-    const legacy = await this.legacyProxy.getJson<Record<string, unknown>>('/_state/rooms');
-    if (legacy) return legacy;
+    // 외부 상태 저장소(memory/redis) 어댑터 공통 조회 경로.
+    const rooms = await roomStateRepository.list();
     return {
-      backend: 'nest-local',
-      count: 0,
-      rooms: [],
-      migrationPhase: 'phase-2-ops-endpoints',
-      legacyReadProxy: this.legacyProxy.isEnabled(),
+      backend: roomStateRepository.backend,
+      count: rooms.length,
+      rooms,
     };
   }
 
   @Post('/_state/recovery-drill')
   async postRecoveryDrill(@Body() body: { rtoSec?: number; rpoEvents?: number }) {
+    // 운영 리허설 결과를 메트릭에 반영해 대시보드/알람 기준으로 재사용한다.
     const rtoSec = Number(body?.rtoSec);
     const rpoEvents = Number(body?.rpoEvents);
     if (!Number.isFinite(rtoSec) || !Number.isFinite(rpoEvents)) {
@@ -55,21 +43,11 @@ export class OpsController {
         migrationPhase: 'phase-2-ops-endpoints',
       };
     }
-
-    const proxied = await this.legacyProxy.postJson<Record<string, unknown>>('/_state/recovery-drill', {
-      rtoSec,
-      rpoEvents,
-    });
-    if (proxied) return proxied;
-
+    metricsRegistry.recordRecoveryDrill(rtoSec, rpoEvents);
     return {
       ok: true,
-      source: 'nest-local',
-      migrationPhase: 'phase-2-ops-endpoints',
-      legacyWriteProxy: this.legacyProxy.isWriteProxyEnabled(),
       rtoSec,
       rpoEvents,
-      note: 'write proxy disabled or unavailable',
     };
   }
 }

@@ -27,7 +27,7 @@
 - Socket Gateway를 Nest로 추가
 - room partition ordering/queue 정책 반영
 
-5. 상태 저장/복구 체계 이식 [다음]
+5. 상태 저장/복구 체계 이식 [진행중]
 - `RoomStateRepository` 및 정합성 검사 도구 이식
 - 복구 드릴 API 및 risk gate 연동
 
@@ -46,7 +46,8 @@
 - 완료: 1단계
 - 완료: 2단계(운영 엔드포인트 확장)
 - 완료: 4단계(실제 RoomManager/GameLoop 경로를 Nest Gateway에 연결)
-- 다음: 5단계(상태 저장/복구 체계 이식)
+- 진행중: 5단계(Nest 로컬 `/_metrics`, `/_state/rooms`, `/_state/consistency` 전환)
+- 다음: 6단계(점진 트래픽 전환)
 
 ## 2단계 환경변수
 

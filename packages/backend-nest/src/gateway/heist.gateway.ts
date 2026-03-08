@@ -1,4 +1,4 @@
-import { Logger } from '@nestjs/common';
+import { Logger, OnModuleDestroy } from '@nestjs/common';
 import {
   OnGatewayInit,
   OnGatewayConnection,
@@ -8,6 +8,7 @@ import {
 } from '@nestjs/websockets';
 import type { Server, Socket } from 'socket.io';
 import { RoomManager } from '../../../backend/src/rooms/RoomManager.js';
+import { RuntimeCoreService } from '../services/runtime-core.service';
 
 type JoinRoomPayload = {
   name: string;
@@ -21,7 +22,7 @@ type JoinRoomPayload = {
   },
   transports: ['websocket', 'polling'],
 })
-export class HeistGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
+export class HeistGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect, OnModuleDestroy {
   private readonly logger = new Logger(HeistGateway.name);
   private roomManager: RoomManager | null = null;
   private readonly minPlayers = parseInt(process.env.MIN_PLAYERS || '1', 10);
@@ -29,10 +30,13 @@ export class HeistGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
   @WebSocketServer()
   server!: Server;
 
+  constructor(private readonly runtimeCore: RuntimeCoreService) {}
+
   afterInit(server: Server): void {
     // 4단계 완성: Nest Gateway에서 기존 RoomManager/GameLoop를 직접 사용한다.
     // 이렇게 하면 스킬/물리/틱/스냅샷 브로드캐스트가 legacy와 동일하게 동작한다.
     this.roomManager = new RoomManager(server as any, this.minPlayers);
+    this.runtimeCore.setRoomManager(this.roomManager);
   }
 
   handleConnection(client: Socket): void {
