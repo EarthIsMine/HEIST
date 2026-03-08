@@ -8,6 +8,13 @@ import { useLobbyStore } from '../stores/useLobbyStore';
 import { useGameStore } from '../stores/useGameStore';
 import { getSocket } from '../net/socket';
 import { buildEntryFeeTx } from '../solana/entryFee';
+
+function createRequestId(): string {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID();
+  }
+  return `req-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
 import { playBGM, stopBGM } from '../audio/bgm';
 import { ENTRY_FEE_LAMPORTS, COP_COUNT, THIEF_COUNT } from '@heist/shared';
 import type { Team, RoomInfo } from '@heist/shared';
@@ -306,10 +313,17 @@ export function LobbyPage() {
     socket.emit(
       'join_room',
       roomId,
-      { name, walletAddress: publicKey.toBase58() },
+      { name, walletAddress: publicKey.toBase58(), requestId: createRequestId() },
       (result) => {
         if (!result.ok) {
-          alert(result.error || 'Failed to join room');
+          // 서버가 핫샤드 회피용 roomId를 제안하면 입력값을 갱신해 다음 시도를 돕는다.
+          if (result.suggestedRoomId) {
+            setRoomId(result.suggestedRoomId);
+          }
+          const message = result.retryAfterSec
+            ? `${result.error || 'Failed to join room'} (retry in ${result.retryAfterSec}s)`
+            : result.error || 'Failed to join room';
+          alert(result.suggestedRoomId ? `${message}\nSuggested room: ${result.suggestedRoomId}` : message);
         }
       },
     );
@@ -398,9 +412,17 @@ export function LobbyPage() {
                         getSocket().emit(
                           'join_room',
                           room.id,
-                          { name, walletAddress: publicKey.toBase58() },
+                          { name, walletAddress: publicKey.toBase58(), requestId: createRequestId() },
                           (result) => {
-                            if (!result.ok) alert(result.error || 'Failed to join');
+                            if (!result.ok) {
+                              if (result.suggestedRoomId) {
+                                setRoomId(result.suggestedRoomId);
+                              }
+                              const message = result.retryAfterSec
+                                ? `${result.error || 'Failed to join'} (retry in ${result.retryAfterSec}s)`
+                                : result.error || 'Failed to join';
+                              alert(result.suggestedRoomId ? `${message}\nSuggested room: ${result.suggestedRoomId}` : message);
+                            }
                           },
                         );
                       }

@@ -15,8 +15,8 @@ export interface ClientToServerEvents {
 
   join_room: (
     roomId: RoomId,
-    payload: { name: string; walletAddress: string },
-    ack: (result: { ok: boolean; error?: string }) => void,
+    payload: { name: string; walletAddress: string; requestId?: string },
+    ack: (result: { ok: boolean; error?: string; retryAfterSec?: number; suggestedRoomId?: string }) => void,
   ) => void;
 
   confirm_entry: (

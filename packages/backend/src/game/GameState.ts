@@ -160,4 +160,48 @@ export class GameState {
       totalCoins: TOTAL_COINS,
     };
   }
+
+  buildFilteredSnapshots(viewerIds: string[], allObstacles: Obstacle[] = this.getAllObstacles()): Map<string, StateSnapshot> {
+    // viewer마다 반복해서 Map/배열을 재생성하지 않도록 공통 데이터를 재사용한다.
+    const allPlayers = [...this.players.values()];
+    const snapshots = new Map<string, StateSnapshot>();
+
+    for (const viewerId of viewerIds) {
+      const viewer = this.players.get(viewerId);
+      if (!viewer) {
+        snapshots.set(viewerId, this.toSnapshot());
+        continue;
+      }
+
+      const visiblePlayers = allPlayers.filter((p) => {
+        // 자신/아군은 항상 표시, 적은 거리+LOS 조건을 만족할 때만 표시.
+        if (p.id === viewerId || p.team === viewer.team) return true;
+        const dist = distance(viewer.position, p.position);
+        if (dist > viewer.visionRadius) return false;
+        return hasLineOfSight(viewer.position, p.position, allObstacles);
+      });
+
+      const processedPlayers = visiblePlayers.map((p) => {
+        if (p.isDisguised && viewer.team === 'cop' && p.id !== viewerId) {
+          return { ...p, team: 'cop' as Team, isDisguised: false };
+        }
+        return p;
+      });
+
+      snapshots.set(viewerId, {
+        tick: this.tick,
+        phase: this.phase,
+        matchTimerMs: this.matchTimerMs,
+        headStartTimerMs: this.headStartTimerMs,
+        players: processedPlayers,
+        storages: this.storages,
+        jail: this.jail,
+        obstacles: allObstacles,
+        stolenCoins: this.stolenCoins,
+        totalCoins: TOTAL_COINS,
+      });
+    }
+
+    return snapshots;
+  }
 }

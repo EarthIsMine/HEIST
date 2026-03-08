@@ -1,0 +1,43 @@
+# HEIST Socket.IO upstream
+# - 다중 인스턴스 환경에서 /socket.io 경로는 sticky session을 강제한다.
+# - ip_hash는 가장 단순한 방식이며, 운영 환경에 따라 cookie 기반 sticky가 더 적합할 수 있다.
+upstream heist_backend_socketio {
+    ip_hash;
+    server 10.0.0.11:3001 max_fails=3 fail_timeout=10s;
+    server 10.0.0.12:3001 max_fails=3 fail_timeout=10s;
+    server 10.0.0.13:3001 max_fails=3 fail_timeout=10s;
+}
+
+# 일반 HTTP API는 sticky가 꼭 필요하지 않으므로 별도 upstream으로 분리 가능
+upstream heist_backend_http {
+    least_conn;
+    server 10.0.0.11:3001 max_fails=3 fail_timeout=10s;
+    server 10.0.0.12:3001 max_fails=3 fail_timeout=10s;
+    server 10.0.0.13:3001 max_fails=3 fail_timeout=10s;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name heist.example.com;
+
+    # Socket.IO: sticky + websocket 업그레이드 필수
+    location /socket.io/ {
+        proxy_pass http://heist_backend_socketio;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_read_timeout 75s;
+        proxy_send_timeout 75s;
+    }
+
+    # API/헬스체크는 일반 LB 정책 사용
+    location / {
+        proxy_pass http://heist_backend_http;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+}
+

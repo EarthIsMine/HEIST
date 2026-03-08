@@ -211,11 +211,15 @@ export class Room {
 
     this.gameLoop = new GameLoop(
       playerInits,
-      (getSnapshot) => {
+      (snapshots) => {
+        // GameLoop가 미리 만든 player별 스냅샷을 그대로 전달해 재계산을 피한다.
         for (const [socketId] of this.players) {
           const socket = this.io.sockets.sockets.get(socketId);
           if (socket) {
-            socket.emit('state_snapshot', getSnapshot(socketId));
+            const snapshot = snapshots.get(socketId);
+            if (snapshot) {
+              socket.emit('state_snapshot', snapshot);
+            }
           }
         }
       },
@@ -241,6 +245,7 @@ export class Room {
         }
       },
       botIds,
+      this.id,
     );
 
     for (const [socketId] of this.players) {

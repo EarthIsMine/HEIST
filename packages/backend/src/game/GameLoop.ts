@@ -4,6 +4,7 @@ import {
   MATCH_DURATION_MS,
   HEAD_START_MS,
 } from '@heist/shared';
+import { performance } from 'node:perf_hooks';
 import { GameState, type PlayerInit } from './GameState.js';
 import { updatePlayerMovement, resolveObstacleCollision } from './physics.js';
 import {
@@ -21,28 +22,35 @@ import {
 } from './skills.js';
 import { BotAI } from './BotAI.js';
 import { log } from '../utils/logger.js';
+import { LoopMetrics } from '../observability/LoopMetrics.js';
 
 export class GameLoop {
   private state: GameState;
-  private intervalId: NodeJS.Timeout | null = null;
+  private timerId: NodeJS.Timeout | null = null;
+  // 이상적인 다음 틱 시각(ms). 실제 실행과의 차이로 drift를 계산한다.
+  private nextTickAt: number = 0;
   private startTime: number = 0;
-  private onTick: (getSnapshot: (playerId: string) => StateSnapshot) => void;
+  private onTick: (snapshots: Map<string, StateSnapshot>) => void;
   private onEnd: (result: GameResult) => void;
   private onSkillEvent?: (event: SkillEvent) => void;
   private botAI: BotAI;
+  private metrics: LoopMetrics;
+  private running: boolean = false;
 
   constructor(
     players: PlayerInit[],
-    onTick: (getSnapshot: (playerId: string) => StateSnapshot) => void,
+    onTick: (snapshots: Map<string, StateSnapshot>) => void,
     onEnd: (result: GameResult) => void,
     onSkillEvent?: (event: SkillEvent) => void,
     botIds?: string[],
+    roomLabel: string = 'unknown-room',
   ) {
     this.state = new GameState(players);
     this.onTick = onTick;
     this.onEnd = onEnd;
     this.onSkillEvent = onSkillEvent;
     this.botAI = new BotAI();
+    this.metrics = new LoopMetrics(roomLabel, `room=${roomLabel}`);
     if (botIds) {
       for (const id of botIds) {
         this.botAI.registerBot(id);
@@ -51,78 +59,123 @@ export class GameLoop {
   }
 
   start(): void {
+    if (this.running) return;
+    this.running = true;
     this.startTime = Date.now();
+    this.nextTickAt = this.startTime + TICK_MS;
     this.state.phase = 'head_start';
+    this.metrics.start();
     log('GameLoop', 'Game started (head_start phase)');
+    this.scheduleNextTick();
+  }
 
-    this.intervalId = setInterval(() => {
-      const now = Date.now();
-      const elapsed = now - this.startTime;
-      const dt = TICK_MS / 1000;
+  private scheduleNextTick(): void {
+    if (!this.running) return;
+    // 절대 시각 기반으로 지연을 계산해 setInterval 누적 오차를 줄인다.
+    const delay = Math.max(0, this.nextTickAt - Date.now());
+    this.timerId = setTimeout(() => this.runTick(), delay);
+  }
 
-      // Phase transitions
-      if (this.state.phase === 'head_start' && elapsed >= HEAD_START_MS) {
-        this.state.phase = 'playing';
-        log('GameLoop', 'Phase: playing');
-      }
+  private runTick(): void {
+    if (!this.running) return;
 
-      // Update stuns
-      updateStuns(this.state, now);
+    const tickStartMs = Date.now();
+    const tickStartPerf = performance.now();
+    const driftMs = tickStartMs - this.nextTickAt;
+    const elapsed = tickStartMs - this.startTime;
+    const dt = TICK_MS / 1000;
 
-      // Update disguises
-      const disguiseEvents = updateDisguises(this.state, now);
-      for (const event of disguiseEvents) {
-        this.onSkillEvent?.(event);
-      }
+    // Phase transitions
+    if (this.state.phase === 'head_start' && elapsed >= HEAD_START_MS) {
+      this.state.phase = 'playing';
+      log('GameLoop', 'Phase: playing');
+    }
 
-      // Update dynamic obstacles (remove expired walls)
-      const wallEvents = updateDynamicObstacles(this.state, now);
-      for (const event of wallEvents) {
-        this.onSkillEvent?.(event);
-      }
+    // Update stuns
+    updateStuns(this.state, tickStartMs);
 
-      // Update movement + obstacle collision
-      const allObstacles = this.state.getAllObstacles();
-      for (const [, player] of this.state.players) {
-        updatePlayerMovement(player, dt, this.state.phase);
-        resolveObstacleCollision(player, allObstacles);
-      }
+    // Update disguises
+    const disguiseEvents = updateDisguises(this.state, tickStartMs);
+    for (const event of disguiseEvents) {
+      this.onSkillEvent?.(event);
+    }
 
-      // Update bot AI
-      if (this.state.phase !== 'head_start' || true) {
-        this.botAI.update(this.state, (botId, skill, targetId) => {
-          this.requestSkill(botId, skill, targetId);
-        });
-      }
+    // Update dynamic obstacles (remove expired walls)
+    const wallEvents = updateDynamicObstacles(this.state, tickStartMs);
+    for (const event of wallEvents) {
+      this.onSkillEvent?.(event);
+    }
 
-      // Update channeling skills
-      const skillEvents = updateChanneling(this.state, dt, now);
-      for (const event of skillEvents) {
-        this.onSkillEvent?.(event);
-      }
+    // 물리 계산은 동일한 obstacle 스냅샷 기준으로 처리해 틱 내 일관성을 유지한다.
+    const allObstacles = this.state.getAllObstacles();
+    for (const [, player] of this.state.players) {
+      updatePlayerMovement(player, dt, this.state.phase);
+      resolveObstacleCollision(player, allObstacles);
+    }
 
-      // Update timers
-      this.state.tick++;
-      this.state.matchTimerMs = Math.max(0, MATCH_DURATION_MS - elapsed);
-      this.state.headStartTimerMs = Math.max(0, HEAD_START_MS - elapsed);
+    // Update bot AI
+    if (this.state.phase !== 'head_start' || true) {
+      this.botAI.update(this.state, (botId, skill, targetId) => {
+        this.requestSkill(botId, skill, targetId);
+      });
+    }
 
-      // Win conditions
-      const result = this.checkWinConditions();
-      if (result) {
-        this.stop();
-        this.onEnd(result);
-        return;
-      }
+    // Update channeling skills
+    const skillEvents = updateChanneling(this.state, dt, tickStartMs);
+    for (const event of skillEvents) {
+      this.onSkillEvent?.(event);
+    }
 
-      // Broadcast per-player filtered snapshots
-      this.onTick((playerId: string) => this.state.toFilteredSnapshot(playerId));
-    }, TICK_MS);
+    // Update timers
+    this.state.tick++;
+    this.state.matchTimerMs = Math.max(0, MATCH_DURATION_MS - elapsed);
+    this.state.headStartTimerMs = Math.max(0, HEAD_START_MS - elapsed);
+
+    // Win conditions
+    const result = this.checkWinConditions();
+    if (result) {
+      this.stop();
+      this.onEnd(result);
+      return;
+    }
+
+    // 플레이어별 가시성 필터링 스냅샷을 한 번에 생성해 비용을 계측한다.
+    const snapshotStartPerf = performance.now();
+    const viewerIds = [...this.state.players.keys()];
+    const snapshots = this.state.buildFilteredSnapshots(viewerIds, this.state.getAllObstacles());
+    const snapshotBuildMs = performance.now() - snapshotStartPerf;
+
+    // 소켓 emit 구간을 분리 계측해 네트워크/직렬화 비용을 구분한다.
+    const emitStartPerf = performance.now();
+    this.onTick(snapshots);
+    const emitMs = performance.now() - emitStartPerf;
+
+    const tickDurationMs = performance.now() - tickStartPerf;
+    this.metrics.record({
+      driftMs,
+      tickDurationMs,
+      snapshotBuildMs,
+      emitMs,
+      playerCount: this.state.players.size,
+      overrun: tickDurationMs > TICK_MS,
+    });
+
+    this.nextTickAt += TICK_MS;
+    const now = Date.now();
+    // 과도한 지연이 누적되면 기준 시각을 재동기화해 복구 시간을 줄인다.
+    if (this.nextTickAt < now - TICK_MS) {
+      this.nextTickAt = now + TICK_MS;
+    }
+    this.scheduleNextTick();
   }
 
   stop(): void {
-    if (this.intervalId) {
-      clearInterval(this.intervalId);
-      this.intervalId = null;
+    if (!this.running) return;
+    this.running = false;
+    this.metrics.stop();
+    if (this.timerId) {
+      clearTimeout(this.timerId);
+      this.timerId = null;
     }
   }
 
