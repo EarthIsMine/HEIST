@@ -12,9 +12,9 @@
 │                                                                 │
 │  ┌──────────────┐   ┌──────────────────┐   ┌────────────────┐  │
 │  │   @heist/    │   │    @heist/       │   │   @heist/      │  │
-│  │   shared     │◄──│    backend       │   │   frontend     │  │
+│  │   shared     │◄──│  backend-nest    │   │   frontend     │  │
 │  │              │◄──│                  │   │                │  │
-│  │  Types       │   │  Express         │   │  React + Vite  │  │
+│  │  Types       │   │  NestJS          │   │  React + Vite  │  │
 │  │  Constants   │   │  Socket.IO       │   │  Canvas 2D     │  │
 │  │  Map Data    │   │  Game Loop       │   │  Zustand       │  │
 │  │  Protocol    │   │  Solana Payout   │   │  Socket.IO     │  │
@@ -41,10 +41,10 @@ npm workspaces 기반 모노레포로 3개 패키지를 관리합니다.
 | 패키지 | 역할 | 주요 의존성 |
 |--------|------|-------------|
 | `@heist/shared` | 타입, 상수, 맵 데이터, 소켓 프로토콜 정의 | TypeScript |
-| `@heist/backend` | 게임 서버 (상태 관리, 물리, 스킬, 정산) | Express, Socket.IO, @solana/web3.js |
+| `@heist/backend-nest` | 게임 서버 (Nest Gateway + 런타임 코어) | NestJS, Socket.IO, @solana/web3.js |
 | `@heist/frontend` | 게임 클라이언트 (렌더링, 입력, UI) | React, Vite, Zustand, styled-components, Socket.IO Client |
 
-`@heist/shared`는 백엔드와 프론트엔드 양쪽에서 참조하여 **타입 안전한 통신 프로토콜**을 보장합니다.
+`@heist/shared`는 Nest 백엔드와 프론트엔드 양쪽에서 참조하여 **타입 안전한 통신 프로토콜**을 보장합니다.
 
 ---
 
@@ -52,10 +52,10 @@ npm workspaces 기반 모노레포로 3개 패키지를 관리합니다.
 
 ### 3.1 서버 초기화
 
-`Express` HTTP 서버 위에 `Socket.IO`를 마운트합니다.
+`NestJS` 애플리케이션 위에서 `Socket.IO Gateway`를 통해 실시간 이벤트를 처리합니다.
 
 ```
-Express (HTTP)
+NestJS (HTTP + WebSocket Gateway)
   └── Socket.IO (WebSocket + long-polling fallback)
        ├── CORS 설정 (프론트엔드 origin 허용)
        └── TypeScript 제네릭으로 타입 안전한 이벤트 처리
@@ -444,8 +444,8 @@ App.tsx
 
 ### 개발 환경
 ```bash
-npm install          # 의존성 설치
-npm run dev          # 백엔드(8080) + 프론트엔드(3000) 동시 실행
+ npm install          # 의존성 설치
+ npm run dev          # 백엔드(8081) + 프론트엔드(3000) 동시 실행
 ```
 
 ### 프로덕션 배포
@@ -462,7 +462,7 @@ npm run dev          # 백엔드(8080) + 프론트엔드(3000) 동시 실행
 |------|------|
 | `ESCROW_SECRET_KEY` | 에스크로 지갑 비밀키 (정산/환불용) |
 | `VITE_SERVER_URL` | 프론트엔드에서 백엔드 접속 URL |
-| `PORT` | 백엔드 서버 포트 (기본 8080) |
+| `PORT` | 백엔드 서버 포트 (기본 8081) |
 
 ---
 

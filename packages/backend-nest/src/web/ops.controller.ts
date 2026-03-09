@@ -1,8 +1,7 @@
 import { BadRequestException, Body, Controller, Get, Post } from '@nestjs/common';
-import { metricsRegistry } from '../../../backend/src/observability/MetricsRegistry.js';
-import { roomStateRepository } from '../../../backend/src/state/RoomStateRepository.js';
-import { getNestTrafficDecision } from '../domain/traffic-canary';
-import { RuntimeCoreService } from '../services/runtime-core.service';
+import { metricsRegistry } from '../core/observability/MetricsRegistry.js';
+import { roomStateRepository } from '../core/state/RoomStateRepository.js';
+import { RuntimeCoreService } from '../services/runtime-core.service.js';
 
 @Controller()
 export class OpsController {
@@ -10,25 +9,7 @@ export class OpsController {
 
   @Get('/_metrics')
   async getMetrics() {
-    // legacy 프록시를 거치지 않고 Nest 프로세스가 누적한 메트릭 스냅샷을 직접 노출한다.
-    const snapshot = metricsRegistry.getSnapshot() as Record<string, unknown>;
-    const sampleRoomId = process.env.NEST_TRAFFIC_SAMPLE_ROOM_ID || 'default:sample';
-    // 6단계 운영 가시성: 현재 Nest 카나리 정책과 샘플 룸 판정을 메트릭에 함께 노출한다.
-    return {
-      ...snapshot,
-      migration: {
-        nestTrafficCanary: {
-          strict: process.env.NEST_TRAFFIC_CANARY_STRICT === 'true',
-          enabled: process.env.NEST_TRAFFIC_CANARY_ENABLED === 'true',
-          percent: Number(process.env.NEST_TRAFFIC_CANARY_PERCENT || '10'),
-          roomTypes: (process.env.NEST_TRAFFIC_CANARY_ROOM_TYPES || 'default')
-            .split(',')
-            .map((v) => v.trim())
-            .filter(Boolean),
-          sampleDecision: getNestTrafficDecision(sampleRoomId),
-        },
-      },
-    };
+    return metricsRegistry.getSnapshot();
   }
 
   @Get('/_state/consistency')

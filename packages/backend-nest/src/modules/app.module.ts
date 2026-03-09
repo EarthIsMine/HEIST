@@ -1,13 +1,11 @@
 import { Module } from '@nestjs/common';
-import { HealthController } from '../web/health.controller';
-import { OpsController } from '../web/ops.controller';
-import { RoomLifecycleController } from '../web/room-lifecycle.controller';
-import { RoomLifecycleService } from '../services/room-lifecycle.service';
-import { HeistGateway } from '../gateway/heist.gateway';
-import { RuntimeCoreService } from '../services/runtime-core.service';
+import { HealthController } from '../web/health.controller.js';
+import { OpsController } from '../web/ops.controller.js';
+import { HeistGateway } from '../gateway/heist.gateway.js';
+import { RuntimeCoreService } from '../services/runtime-core.service.js';
 
 @Module({
-  controllers: [HealthController, OpsController, RoomLifecycleController],
-  providers: [RoomLifecycleService, RuntimeCoreService, HeistGateway],
+  controllers: [HealthController, OpsController],
+  providers: [RuntimeCoreService, HeistGateway],
 })
 export class AppModule {}

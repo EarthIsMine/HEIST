@@ -195,6 +195,7 @@ export function updateChanneling(state: GameState, dt: number, now: number): Ski
       const drain = Math.min(STEAL_RATE * dt, storage.remainingCoins);
       storage.remainingCoins -= drain;
       state.stolenCoins += drain;
+      state.teamCoins += drain;
 
       if (storage.remainingCoins <= 0) {
         storage.remainingCoins = 0;
@@ -297,9 +298,9 @@ export function tryBuildWall(
   if (!player || player.team !== 'thief') return null;
   if (player.isJailed || player.isStunned || player.channeling) return null;
   if (now < player.wallCooldownUntil) return null;
-  if (state.stolenCoins < WALL_COST_COINS) return null;
+  if (state.teamCoins < WALL_COST_COINS) return null;
 
-  state.stolenCoins -= WALL_COST_COINS;
+  state.teamCoins -= WALL_COST_COINS;
 
   // Place wall behind the player (opposite of last movement direction)
   let dx = -player.lastDirection.x;

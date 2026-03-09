@@ -6,7 +6,7 @@ import type {
   RoomInfo,
   StateSnapshot,
   GameResult,
-} from './types';
+} from './types.js';
 
 export interface ClientToServerEvents {
   list_rooms: (

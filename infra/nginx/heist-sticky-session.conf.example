@@ -3,17 +3,17 @@
 # - ip_hash는 가장 단순한 방식이며, 운영 환경에 따라 cookie 기반 sticky가 더 적합할 수 있다.
 upstream heist_backend_socketio {
     ip_hash;
-    server 10.0.0.11:3001 max_fails=3 fail_timeout=10s;
-    server 10.0.0.12:3001 max_fails=3 fail_timeout=10s;
-    server 10.0.0.13:3001 max_fails=3 fail_timeout=10s;
+    server 10.0.0.11:8081 max_fails=3 fail_timeout=10s;
+    server 10.0.0.12:8081 max_fails=3 fail_timeout=10s;
+    server 10.0.0.13:8081 max_fails=3 fail_timeout=10s;
 }
 
 # 일반 HTTP API는 sticky가 꼭 필요하지 않으므로 별도 upstream으로 분리 가능
 upstream heist_backend_http {
     least_conn;
-    server 10.0.0.11:3001 max_fails=3 fail_timeout=10s;
-    server 10.0.0.12:3001 max_fails=3 fail_timeout=10s;
-    server 10.0.0.13:3001 max_fails=3 fail_timeout=10s;
+    server 10.0.0.11:8081 max_fails=3 fail_timeout=10s;
+    server 10.0.0.12:8081 max_fails=3 fail_timeout=10s;
+    server 10.0.0.13:8081 max_fails=3 fail_timeout=10s;
 }
 
 server {

@@ -7,9 +7,8 @@ import {
   WebSocketServer,
 } from '@nestjs/websockets';
 import type { Server, Socket } from 'socket.io';
-import { RoomManager } from '../../../backend/src/rooms/RoomManager.js';
-import { RuntimeCoreService } from '../services/runtime-core.service';
-import { getNestTrafficDecision } from '../domain/traffic-canary';
+import { RoomManager } from '../core/rooms/RoomManager.js';
+import { RuntimeCoreService } from '../services/runtime-core.service.js';
 
 type JoinRoomPayload = {
   name: string;
@@ -27,7 +26,6 @@ export class HeistGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
   private readonly logger = new Logger(HeistGateway.name);
   private roomManager: RoomManager | null = null;
   private readonly minPlayers = parseInt(process.env.MIN_PLAYERS || '1', 10);
-  private readonly strictTrafficCanary = process.env.NEST_TRAFFIC_CANARY_STRICT === 'true';
 
   @WebSocketServer()
   server!: Server;
@@ -51,18 +49,6 @@ export class HeistGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
     });
 
     client.on('join_room', (roomId: string, payload: JoinRoomPayload, ack) => {
-      // 6단계: strict 모드에서는 카나리 비대상 룸을 Nest에서 받지 않고 legacy 라우팅을 유도한다.
-      const decision = getNestTrafficDecision(roomId);
-      if (this.strictTrafficCanary && !decision.allowed) {
-        ack({
-          ok: false,
-          error: 'Room is not assigned to Nest by traffic canary policy',
-          retryAfterSec: 1,
-          route: 'legacy',
-          canary: decision,
-        });
-        return;
-      }
       manager.handleJoinRoom(client as any, roomId, payload as any, ack);
     });
 

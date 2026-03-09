@@ -1,5 +1,5 @@
-import type { Vec2, Storage, Jail, Obstacle } from './types';
-import { COINS_PER_STORAGE } from './constants';
+import type { Vec2, Storage, Jail, Obstacle } from './types.js';
+import { COINS_PER_STORAGE } from './constants.js';
 
 export const STORAGE_POSITIONS: Vec2[] = [
   { x: 480, y: 360 },

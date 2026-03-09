@@ -81,6 +81,7 @@ export interface StateSnapshot {
   jail: Jail;
   obstacles: Obstacle[];
   stolenCoins: number;
+  teamCoins: number;
   totalCoins: number;
 }
 

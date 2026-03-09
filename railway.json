@@ -2,10 +2,10 @@
   "$schema": "https://railway.com/railway.schema.json",
   "build": {
     "builder": "NIXPACKS",
-    "buildCommand": "npm install && npm run build -w packages/shared && npm run build -w packages/backend"
+    "buildCommand": "npm install && npm run build -w packages/shared && npm run build -w packages/backend-nest"
   },
   "deploy": {
-    "startCommand": "node packages/backend/dist/index.js",
+    "startCommand": "node --experimental-specifier-resolution=node packages/backend-nest/dist/main.js",
     "healthcheckPath": "/health",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10

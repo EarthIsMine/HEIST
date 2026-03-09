@@ -2,12 +2,12 @@ module.exports = {
   apps: [
     {
       name: 'heist-be',
-      script: 'npx',
-      args: 'tsx packages/backend/src/index.ts',
+      script: 'node',
+      args: '--experimental-specifier-resolution=node packages/backend-nest/dist/main.js',
       cwd: '/srv/solstartup',
       env: {
         NODE_ENV: 'production',
-        PORT: 8080,
+        NEST_PORT: 8081,
       },
       watch: false,
       max_memory_restart: '300M',

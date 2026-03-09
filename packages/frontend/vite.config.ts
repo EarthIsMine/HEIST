@@ -15,7 +15,7 @@ export default defineConfig({
     allowedHosts: ['yt4307.mooo.com'],
     proxy: {
       '/socket.io': {
-        target: 'http://localhost:8080',
+        target: 'http://localhost:8081',
         ws: true,
       },
     },

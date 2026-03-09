@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
-import { RoomManager, type StateConsistencyReport } from '../../../backend/src/rooms/RoomManager.js';
-import { metricsRegistry } from '../../../backend/src/observability/MetricsRegistry.js';
+import { RoomManager, type StateConsistencyReport } from '../core/rooms/RoomManager.js';
+import { metricsRegistry } from '../core/observability/MetricsRegistry.js';
 
 @Injectable()
 export class RuntimeCoreService implements OnModuleDestroy {

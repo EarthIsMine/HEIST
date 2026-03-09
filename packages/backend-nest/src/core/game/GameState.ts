@@ -27,6 +27,7 @@ export class GameState {
   storages: Storage[];
   jail: Jail;
   stolenCoins: number = 0;
+  teamCoins: number = 0;
   dynamicObstacles: Obstacle[] = [];
 
   constructor(playerInits: PlayerInit[]) {
@@ -119,6 +120,7 @@ export class GameState {
       jail: this.jail,
       obstacles: this.getAllObstacles(),
       stolenCoins: this.stolenCoins,
+      teamCoins: this.teamCoins,
       totalCoins: TOTAL_COINS,
     };
   }
@@ -157,6 +159,7 @@ export class GameState {
       jail: this.jail,
       obstacles: allObstacles,
       stolenCoins: this.stolenCoins,
+      teamCoins: this.teamCoins,
       totalCoins: TOTAL_COINS,
     };
   }
@@ -198,6 +201,7 @@ export class GameState {
         jail: this.jail,
         obstacles: allObstacles,
         stolenCoins: this.stolenCoins,
+        teamCoins: this.teamCoins,
         totalCoins: TOTAL_COINS,
       });
     }

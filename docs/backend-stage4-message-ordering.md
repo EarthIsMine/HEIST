@@ -20,11 +20,10 @@ Stage 4의 메시지 순서 보장 정책은 `roomId`를 파티션 키로 삼고
 
 파일:
 
-- `packages/backend/src/rooms/RoomManager.ts`
-- `packages/backend/src/observability/MetricsRegistry.ts` (`/_metrics.operations.messageOrdering`)
+- `packages/backend-nest/src/core/rooms/RoomManager.ts`
+- `packages/backend-nest/src/core/observability/MetricsRegistry.ts` (`/_metrics.operations.messageOrdering`)
 
 ## 한계
 
 - 프로세스 내부 순서 보장이다.
 - 멀티 노드 환경의 전역 순서 보장은 여전히 room affinity/sticky session/adapter 구성에 의존한다.
-

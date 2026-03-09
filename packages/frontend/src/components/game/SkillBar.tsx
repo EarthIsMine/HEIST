@@ -104,7 +104,7 @@ export function SkillBar() {
       dist(me.position, snapshot.jail.position) <= BREAK_JAIL_RANGE + snapshot.jail.radius;
     const canBreakJail = nearJail && snapshot.jail.inmates.length > 0 && !me.channeling;
     const canDisguise = !me.channeling && !me.isDisguised;
-    const canBuildWall = !me.channeling && snapshot.stolenCoins >= WALL_COST_COINS;
+    const canBuildWall = !me.channeling && (snapshot.teamCoins ?? snapshot.stolenCoins) >= WALL_COST_COINS;
 
     return (
       <BarContainer>
@@ -150,7 +150,7 @@ export function SkillBar() {
             }
           }}
         >
-          Wall [E] ({WALL_COST_COINS}c)
+          Wall [E] ({WALL_COST_COINS}c) - {Math.floor(snapshot.teamCoins ?? snapshot.stolenCoins)}c available
         </SkillButton>
         {me.channeling && (
           <SkillButton

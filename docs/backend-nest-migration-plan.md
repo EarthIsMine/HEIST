@@ -1,6 +1,7 @@
 # Backend Nest Migration Plan
 
-기존 `packages/backend`(Express + Socket.IO)를 유지한 채 `packages/backend-nest`를 병행 운영하며 단계적으로 이관한다.
+기존 `packages/backend`를 유지한 채 `packages/backend-nest`를 병행 운영하며 단계적으로 이관했다.
+`2026-03-09` 기준 full cutover 완료 상태를 기록한다.
 
 ## 원칙
 
@@ -8,7 +9,7 @@
 - 단계 완료마다 커밋 + 실행 검증
 - 관측/리스크 게이트(`/_metrics`, `/_state/*`) 먼저 이식 후 트래픽 이관
 
-## 단계
+## 단계(이력)
 
 1. Nest 병행 실행 골격 [완료]
 - Nest 앱 신규 패키지 생성
@@ -31,7 +32,7 @@
 - `RoomStateRepository` 및 정합성 검사 도구 이식
 - 복구 드릴 API 및 risk gate 연동
 
-6. 점진 트래픽 전환 [진행중]
+6. 점진 트래픽 전환 [완료]
 - `10% -> 25% -> 50% -> 100%` 룸 타입/비율 카나리
 - 게이트 위반 시 즉시 롤백
 
@@ -40,6 +41,7 @@
 - Stage4 리스크 게이트를 Nest에서도 동일 충족
 - legacy backend 의존 read/write 경로 제거
 - 운영 엔드포인트/대시보드 완전 이관
+- `packages/backend` 제거
 
 ## 현재 상태
 
@@ -48,20 +50,8 @@
 - 완료: 3단계(Room lifecycle 경로 이식)
 - 완료: 4단계(실제 RoomManager/GameLoop 경로를 Nest Gateway에 연결)
 - 완료: 5단계(Nest 로컬 `/_metrics`, `/_state/rooms`, `/_state/consistency`, `/_state/recovery-drill` 연동)
-- 진행중: 6단계(룸 해시 기반 트래픽 카나리 + strict 게이트, 10% 검증 완료)
-
-## 6단계 환경변수
-
-- `NEST_TRAFFIC_CANARY_ENABLED=true|false` (기본 `false`)
-- `NEST_TRAFFIC_CANARY_PERCENT=10` (기본 `10`)
-- `NEST_TRAFFIC_CANARY_ROOM_TYPES=default,ranked` (기본 `default`)
-- `NEST_TRAFFIC_CANARY_STRICT=true|false` (기본 `false`)
-- `NEST_TRAFFIC_SAMPLE_ROOM_ID=default:sample` (`/_metrics` 샘플 판정용)
-
-## 6단계 검증 포인트
-
-- `GET /_migrate/room/decision?roomId=default:abc`로 라우팅 판정 확인
-- strict on + 비대상 roomId일 때 `join_room`/`/_migrate/room/join`에서 `route=legacy` 응답 확인
-- `/_metrics.migration.nestTrafficCanary`로 현재 카나리 설정/샘플 판정 확인
+- 완료: 6단계(100% Nest 전환)
+- 완료: 카나리/legacy 라우팅 분기 제거
+- 완료: migration 전용 엔드포인트(`/_migrate/*`) 제거
 
 참고 런북: `docs/backend-stage6-nest-traffic-rollout.md`

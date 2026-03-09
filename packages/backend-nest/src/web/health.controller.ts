@@ -1,5 +1,5 @@
 import { Controller, Get } from '@nestjs/common';
-import { metricsRegistry } from '../../../backend/src/observability/MetricsRegistry.js';
+import { metricsRegistry } from '../core/observability/MetricsRegistry.js';
 
 @Controller()
 export class HealthController {
@@ -9,7 +9,7 @@ export class HealthController {
     return {
       status: metricsRegistry.isOverloaded() ? 'degraded' : 'ok',
       service: 'backend-nest',
-      phase: 'parallel-migration',
+      phase: 'full-cutover',
       checkedAt: new Date().toISOString(),
     };
   }

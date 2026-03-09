@@ -48,7 +48,7 @@
 |---|---|
 | 모노레포 | npm workspaces |
 | 공유 타입 | `@heist/shared` (TypeScript) |
-| 백엔드 | Node.js, Socket.IO, tsx |
+| 백엔드 | NestJS, Socket.IO |
 | 프론트엔드 | React, Vite, Zustand, styled-components |
 | 렌더링 | Canvas 2D (HiDPI 지원, devicePixelRatio) |
 | 블록체인 | Solana (devnet), @solana/web3.js |
@@ -63,18 +63,12 @@ packages/
 │       ├── constants.ts   # 게임 밸런스 상수
 │       ├── map.ts         # 저장소, 스폰, 감옥, 장애물 배치
 │       └── protocol.ts    # Socket.IO 이벤트 타입
-├── backend/         # 게임 서버
+├── backend-nest/    # Nest 게임 서버
 │   └── src/
-│       ├── game/
-│       │   ├── GameLoop.ts    # 20Hz 틱 루프 (50ms)
-│       │   ├── GameState.ts   # 상태 관리, 플레이어별 스냅샷 필터링
-│       │   ├── physics.ts     # 이동, 장애물 충돌, LOS 계산
-│       │   ├── skills.ts      # 스킬 로직 (steal, arrest, break_jail)
-│       │   └── BotAI.ts       # 봇 AI
-│       ├── rooms/
-│       │   └── Room.ts        # 방 관리, 소켓별 개별 emit
-│       └── solana/
-│           └── payout.ts      # 정산 및 환불
+│       ├── gateway/           # Socket.IO Gateway
+│       ├── web/               # health/metrics/state 엔드포인트
+│       ├── services/          # 런타임 서비스
+│       └── core/              # 게임 코어(Room/GameLoop/Observability)
 └── frontend/        # 게임 클라이언트
     └── src/
         ├── canvas/
@@ -110,7 +104,7 @@ npm run build -w packages/shared
 npm run dev
 ```
 
-- 백엔드: `http://localhost:3001`
+- 백엔드: `http://localhost:8081`
 - 프론트엔드: `http://localhost:5173`
 
 ## 게임 밸런스 상수
