@@ -245,7 +245,7 @@ const TeamButton = styled.button<{ $active: boolean; $team: string; $disabled?: 
 
 export function LobbyPage() {
   const navigate = useNavigate();
-  const { publicKey, sendTransaction, connected } = useWallet();
+  const { publicKey, sendTransaction } = useWallet();
   const { connection } = useConnection();
 
   const currentRoom = useLobbyStore((s) => s.currentRoom);
@@ -270,12 +270,12 @@ export function LobbyPage() {
   // Leave room when wallet disconnects
   const reset = useLobbyStore((s) => s.reset);
   useEffect(() => {
-    if (!connected && currentRoom) {
+    if (!publicKey && currentRoom) {
       getSocket().disconnect();
       getSocket().connect();
       reset();
     }
-  }, [connected, currentRoom, reset]);
+  }, [publicKey, currentRoom, reset]);
 
   // Fetch room list periodically
   useEffect(() => {
@@ -299,14 +299,17 @@ export function LobbyPage() {
 
   // Fetch balance
   useEffect(() => {
-    if (!publicKey) return;
+    if (!publicKey) {
+      setBalance(null);
+      return;
+    }
     connection.getBalance(publicKey).then((bal) => {
       setBalance(bal / LAMPORTS_PER_SOL);
     });
   }, [publicKey, connection]);
 
   const handleJoin = useCallback(() => {
-    if (!connected || !publicKey) return;
+    if (!publicKey) return;
     const name = playerName.trim() || `Player-${publicKey.toBase58().slice(0, 4)}`;
     const socket = getSocket();
 
@@ -327,7 +330,7 @@ export function LobbyPage() {
         }
       },
     );
-  }, [connected, publicKey, playerName, roomId]);
+  }, [publicKey, playerName, roomId]);
 
   const handlePayEntry = useCallback(async () => {
     if (!publicKey || !sendTransaction) return;
@@ -407,7 +410,7 @@ export function LobbyPage() {
                     key={room.id}
                     onClick={() => {
                       setRoomId(room.id);
-                      if (connected && publicKey) {
+                      if (publicKey) {
                         const name = playerName.trim() || `Player-${publicKey.toBase58().slice(0, 4)}`;
                         getSocket().emit(
                           'join_room',
@@ -447,8 +450,8 @@ export function LobbyPage() {
                 value={roomId}
                 onChange={(e) => setRoomId(e.target.value)}
               />
-              <Button onClick={handleJoin} disabled={!connected || !roomId.trim()}>
-                {connected ? 'Create / Join Room' : 'Connect Wallet First'}
+              <Button onClick={handleJoin} disabled={!publicKey || !roomId.trim()}>
+                {publicKey ? 'Create / Join Room' : 'Connect Wallet First'}
               </Button>
             </Section>
           </>
