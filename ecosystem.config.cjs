@@ -7,7 +7,7 @@ module.exports = {
       cwd: '/srv/solstartup',
       env: {
         NODE_ENV: 'production',
-        NEST_PORT: 8080,
+        NEST_PORT: 8081,
       },
       watch: false,
       max_memory_restart: '300M',
